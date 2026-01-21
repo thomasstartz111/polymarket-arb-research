@@ -1,123 +1,108 @@
 # Polymarket Arbitrage Research
 
-Research project exploring arbitrage and mispricing opportunities in Polymarket prediction markets.
+**Can you find exploitable inefficiencies in prediction markets?**
 
-## What This Does
+I built a scanning system to find out. Short answer: No. The market is brutally efficient.
 
-A TypeScript system that ingests Polymarket data, detects signals, and backtests trading strategies.
+## Key Findings
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Polymarket API │────▶│     Scanner     │────▶│     SQLite      │
-│  (REST + CLOB)  │     │  (30s polling)  │     │  (3,300+ mkts)  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                        │
-┌─────────────────┐     ┌─────────────────┐             │
-│    WebSocket    │────▶│  Real-time Bid  │             │
-│   (CLOB feed)   │     │   Ask Updates   │             ▼
-└─────────────────┘     └─────────────────┘     ┌─────────────────┐
-                                                │  Signal Engine  │
-┌─────────────────┐     ┌─────────────────┐     │  - Correlation  │
-│    Backtest     │◀────│  Semantic       │◀────│  - Anchoring    │
-│    Framework    │     │  Embeddings     │     │  - Attention    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
+| Test | Result |
+|------|--------|
+| Complement Arbitrage (Yes + No ≠ $1) | 0 opportunities in 51,430 snapshots |
+| Fed Rate Market Sum | 97.5% (correctly priced) |
+| Oscar Nomination Sum | 520% for 5 slots (4% over, but fees eat it) |
+| Tradeable Signals | 0 after spread/depth filters |
 
-## Current Data
+**Conclusion:** Polymarket's CLOB keeps Yes + No at exactly 100.00%. Alpha comes from information advantage, not execution edge.
 
-| Metric | Value |
-|--------|-------|
-| Markets tracked | 3,336 |
-| Price snapshots | 33,000+ |
-| Polling interval | 30 seconds |
-| WebSocket updates | ~57/30s during active trading |
-
-## Key Finding: Market Is Efficient
-
-Across all snapshots:
+## Data Collected
 
 ```
-Yes + No = 100.00%  (every single market)
+Markets Tracked:    3,335
+Price Snapshots:    51,430
+Collection Period:  12.6 hours
+WebSocket Updates:  ~57 per 30 seconds
 ```
 
-The CLOB keeps complementary tokens perfectly priced. No simple arbitrage exists.
+## Architecture
 
-## Where Alpha Might Live
-
-After scanning thousands of markets, the pattern:
-
-| Market Type | Opportunity |
-|-------------|-------------|
-| Fed rate markets | Skip - institutional hedging proxy |
-| High-profile politics | Skip - too many eyes |
-| Entertainment (Oscars) | Watch - less sophisticated |
-| Sports props | Watch - relative mispricing |
-| IPO thresholds | Watch - cumulative logic errors |
-
-## Components
-
-### 1. Market Scanner (`src/index.ts`)
-
-Polls Polymarket every 30s, stores market metadata and price snapshots.
-
-### 2. WebSocket Client (`src/api/websocket.ts`)
-
-Real-time CLOB feed for millisecond price updates:
-
-```typescript
-const ws = new PolymarketWebSocket();
-await ws.connect();
-ws.subscribe(tokenId);
-ws.on('price', (update) => {
-  console.log(update.bestBid, update.bestAsk);
-});
+```
+Polymarket API ──▶ Scanner (30s) ──▶ SQLite (51k rows)
+       │                                    │
+       ▼                                    ▼
+   WebSocket ─────────────────────▶ Signal Engine
+  (real-time)                       + Backtest
 ```
 
-### 3. Signal Detection (`src/signals/`)
+### Components
 
-- **V1 Correlation** - String matching for related markets
-- **V2 Semantic** - Embedding-based clustering with transformers.js
-- **Anchoring** - Price moves on low volume
-- **Attention** - Low activity markets
-
-### 4. Backtest Framework (`src/backtest/`)
-
-Replay historical snapshots through signal strategies:
-
-```typescript
-const results = await runBacktest(mySignalFn, {
-  positionSizeUsd: 100,
-  maxConcurrentPositions: 5,
-  roundTripFeePct: 2.0,
-});
-
-console.log(results.metrics.sharpeRatio);
-console.log(results.metrics.maxDrawdown);
-```
-
-Metrics: P&L, Sharpe, Sortino, max drawdown, profit factor.
-
-### 5. React Dashboard (`ui/`)
-
-Visual interface for monitoring signals and markets.
+| Component | Description |
+|-----------|-------------|
+| **Scanner** | Polls 5,000+ markets every 30 seconds |
+| **WebSocket** | Real-time CLOB feed for millisecond updates |
+| **Signal Engine** | Detects complement arb, anchoring, deadline, attention signals |
+| **Backtest** | Replay historical data with P&L, Sharpe, Sortino metrics |
+| **Semantic Analysis** | Embedding-based clustering to find related markets |
 
 ## Quick Start
 
 ```bash
+# Install
 npm install
-cp .env.example .env
 
-# Start scanner + API
+# Run scanner + API
 npm run dev
 
 # Dashboard (separate terminal)
 cd ui && npm install && npm run dev
 ```
 
-- Scanner/API: http://localhost:3001
-- Dashboard: http://localhost:5173
+- **API:** http://localhost:3000
+- **Dashboard:** http://localhost:5173
 
-## API
+## Signal Types
+
+### 1. Complement Arbitrage
+If Yes + No < $1.00, buy both for guaranteed profit. **Result:** Never found—market is perfectly efficient.
+
+### 2. Cross-Market Correlation
+Related markets should maintain logical relationships. Example: Oscar Best Actor nominations should sum to ~500% (5 slots).
+
+**Finding:** Sum was 520.6%—market 4% overpriced. But 2% fees + spread eliminates the edge.
+
+### 3. Deadline Pressure
+Markets requiring formal acts (legislation, rulings) may be overpriced on "Yes."
+
+### 4. Low Attention
+Boring markets reprice slowly. Potential for stale prices.
+
+## Why Arbitrage Failed
+
+1. **CLOB efficiency** - Deviations arbitraged in milliseconds
+2. **30-second polling** - Too slow for fleeting opportunities
+3. **2% fees** - Kills edges under 3 cents
+4. **Wide spreads** - Most markets untradeable
+5. **Low depth** - Can't size positions profitably
+
+## Where Alpha Might Exist
+
+| Opportunity | Viability |
+|-------------|-----------|
+| Simple arbitrage | ❌ Not viable |
+| Mean reversion | ❌ Moves are information |
+| Cross-market arb | ⚠️ Marginal (fees eat edge) |
+| Information edge | ✅ If you have domain expertise |
+| Event trading | ✅ During price discovery |
+
+## Tech Stack
+
+- **Runtime:** Node.js + TypeScript
+- **Database:** SQLite (better-sqlite3)
+- **Real-time:** WebSocket (ws)
+- **ML:** transformers.js (local embeddings)
+- **Frontend:** React + Vite + Tailwind
+
+## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
@@ -126,30 +111,38 @@ cd ui && npm install && npm run dev
 | `GET /api/markets/:id` | Market details + order book |
 | `GET /api/stats` | System statistics |
 
-## Tech Stack
-
-- TypeScript / Node.js
-- SQLite (better-sqlite3)
-- WebSocket (ws)
-- transformers.js (local embeddings)
-- React + Recharts (dashboard)
-
-## What I Learned
-
-1. **Complement arbitrage doesn't exist** - CLOB keeps Yes/No perfectly balanced
-2. **30s polling too slow** - Real edges taken in milliseconds
-3. **Fees kill small edges** - 2% round-trip eats sub-3-cent arbs
-4. **Information > Execution** - Edge comes from knowing something, not speed
-
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Research Report](docs/RESEARCH_REPORT.md) | Comprehensive findings and methodology |
+| [Research Report](docs/RESEARCH_REPORT.md) | Full methodology and findings |
 | [System Review](docs/SYSTEM_REVIEW.md) | Technical architecture deep-dive |
 | [Experiment Plan](docs/EXPERIMENT_V2.md) | V2 experiment design |
-| [Dev Log](content/ideas/polymarket-arb-research.md) | Narrative write-up |
+
+## Project Structure
+
+```
+├── src/
+│   ├── api/
+│   │   └── websocket.ts      # Real-time CLOB streaming
+│   ├── backtest/
+│   │   ├── index.ts          # Backtest runner
+│   │   ├── metrics.ts        # Sharpe, Sortino, drawdown
+│   │   └── types.ts          # Type definitions
+│   ├── signals/
+│   │   ├── correlation-v2.ts # Semantic clustering
+│   │   ├── embeddings.ts     # Local transformer model
+│   │   └── index.ts          # Signal engine
+│   └── index.ts              # Entry point
+├── ui/                       # React dashboard
+├── data/                     # SQLite database
+└── docs/                     # Documentation
+```
 
 ## License
 
 MIT
+
+---
+
+*Built by [Thomas Startz](https://github.com/thomasstartz111) with Claude Code.*
