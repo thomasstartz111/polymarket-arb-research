@@ -1,114 +1,147 @@
-# Can You Arbitrage Polymarket with AI?
+# Polymarket Arbitrage Research
 
-*I built a prediction market scanner to find mispricings. Here's what I learned.*
+Research project exploring arbitrage and mispricing opportunities in Polymarket prediction markets.
 
-## The Hypothesis
+## What This Does
 
-Prediction markets aggregate information through prices. But retail markets like Polymarket should have exploitable inefficiencies—stale prices, overreactions, arbitrage gaps. I built a scanner with Claude Code to find out.
-
-## What I Built
-
-A Node.js scanner that polls Polymarket every 30 seconds, looking for 4 types of signals:
-
-1. **Complement Arbitrage**: Yes + No should cost $1. If not, free money.
-2. **Anchoring/Overreaction**: Sharp moves on low volume often revert.
-3. **Low Attention**: Boring markets reprice slowly.
-4. **Deadline Pressure**: Markets requiring formal acts (legislation, rulings) are often overpriced.
+A TypeScript system that ingests Polymarket data, detects signals, and backtests trading strategies.
 
 ```
-Polymarket API → Ingester → SQLite → Signal Engine → API Server → React Dashboard
-                   (30s)              (4 signals)
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Polymarket API │────▶│     Scanner     │────▶│     SQLite      │
+│  (REST + CLOB)  │     │  (30s polling)  │     │  (3,300+ mkts)  │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                        │
+┌─────────────────┐     ┌─────────────────┐             │
+│    WebSocket    │────▶│  Real-time Bid  │             │
+│   (CLOB feed)   │     │   Ask Updates   │             ▼
+└─────────────────┘     └─────────────────┘     ┌─────────────────┐
+                                                │  Signal Engine  │
+┌─────────────────┐     ┌─────────────────┐     │  - Correlation  │
+│    Backtest     │◀────│  Semantic       │◀────│  - Anchoring    │
+│    Framework    │     │  Embeddings     │     │  - Attention    │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
-## The Data
+## Current Data
 
-Over 2.7 days of continuous scanning:
+| Metric | Value |
+|--------|-------|
+| Markets tracked | 3,336 |
+| Price snapshots | 33,000+ |
+| Polling interval | 30 seconds |
+| WebSocket updates | ~57/30s during active trading |
 
-- **9.5 million** market snapshots
-- **7,663** signals detected
-- **0** complement arbitrage opportunities
-- **0** tradeable signals (spread < 5%)
+## Key Finding: Market Is Efficient
 
-![Market Efficiency Over Time](docs/images/efficiency-heatmap.png)
+Across all snapshots:
 
-## The Results
+```
+Yes + No = 100.00%  (every single market)
+```
 
-| Signal Type | Count | Tradeable (spread <5%) |
-|-------------|-------|------------------------|
-| Low Attention | 5,080 | 0 (0%) |
-| Deadline | 2,583 | 0 (0%) |
-| Complement | 0 | - |
-| Anchoring | 0 | - |
+The CLOB keeps complementary tokens perfectly priced. No simple arbitrage exists.
 
-The market is more efficient than expected. Every single snapshot showed Yes + No prices summing to exactly $1.00 (within rounding).
+## Where Alpha Might Live
 
-![Price Convergence](docs/images/price-convergence.png)
+After scanning thousands of markets, the pattern:
 
-## Why Arbitrage Failed
+| Market Type | Opportunity |
+|-------------|-------------|
+| Fed rate markets | Skip - institutional hedging proxy |
+| High-profile politics | Skip - too many eyes |
+| Entertainment (Oscars) | Watch - less sophisticated |
+| Sports props | Watch - relative mispricing |
+| IPO thresholds | Watch - cumulative logic errors |
 
-1. **Market makers are sophisticated** — Spreads are wide on thin markets, eliminating any edge before you can trade.
+## Components
 
-2. **Fees eat small edges** — Polymarket's 2% fee kills sub-3-cent arbs.
+### 1. Market Scanner (`src/index.ts`)
 
-3. **30-second polling is too slow** — Real arbs get taken in milliseconds.
+Polls Polymarket every 30s, stores market metadata and price snapshots.
 
-4. **Even "inefficient" markets are untradeable** — Low attention signals exist, but the spreads make them worthless.
+### 2. WebSocket Client (`src/api/websocket.ts`)
 
-## What I Learned
+Real-time CLOB feed for millisecond price updates:
 
-Prediction markets aren't the inefficient backwaters I expected. The obvious mispricings don't exist, and the subtle ones are too small to trade profitably.
+```typescript
+const ws = new PolymarketWebSocket();
+await ws.connect();
+ws.subscribe(tokenId);
+ws.on('price', (update) => {
+  console.log(update.bestBid, update.bestAsk);
+});
+```
 
-The real edge in prediction markets isn't execution—it's information. If you know something the market doesn't, you can profit. But that's true of any market.
+### 3. Signal Detection (`src/signals/`)
 
-**Key insight**: The complement arbitrage check (Yes + No = $1) was the most rigorous test of market efficiency. Finding zero opportunities across 9.5M snapshots means the market maker infrastructure is working exactly as intended.
+- **V1 Correlation** - String matching for related markets
+- **V2 Semantic** - Embedding-based clustering with transformers.js
+- **Anchoring** - Price moves on low volume
+- **Attention** - Low activity markets
 
-## Run It Yourself
+### 4. Backtest Framework (`src/backtest/`)
+
+Replay historical snapshots through signal strategies:
+
+```typescript
+const results = await runBacktest(mySignalFn, {
+  positionSizeUsd: 100,
+  maxConcurrentPositions: 5,
+  roundTripFeePct: 2.0,
+});
+
+console.log(results.metrics.sharpeRatio);
+console.log(results.metrics.maxDrawdown);
+```
+
+Metrics: P&L, Sharpe, Sortino, max drawdown, profit factor.
+
+### 5. React Dashboard (`ui/`)
+
+Visual interface for monitoring signals and markets.
+
+## Quick Start
 
 ```bash
-# Install dependencies
 npm install
-
-# Copy environment template
 cp .env.example .env
 
-# Start the scanner (ingester + API)
+# Start scanner + API
 npm run dev
 
-# In another terminal, start the dashboard
+# Dashboard (separate terminal)
 cd ui && npm install && npm run dev
 ```
 
-- **Dashboard**: http://localhost:5173
-- **API**: http://localhost:3001
+- Scanner/API: http://localhost:3001
+- Dashboard: http://localhost:5173
 
-## Tech Stack
-
-- Node.js + TypeScript
-- SQLite (better-sqlite3)
-- React dashboard with Recharts
-- Polymarket Gamma/CLOB APIs
-
-## API Endpoints
+## API
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/signals` | Ranked active signals |
-| `GET /api/markets` | List all markets |
-| `GET /api/markets/:id` | Market details with order book |
-| `POST /api/trades` | Execute paper trade |
-| `GET /api/trades` | List all trades |
+| `GET /api/signals` | Active signals ranked by score |
+| `GET /api/markets` | All tracked markets |
+| `GET /api/markets/:id` | Market details + order book |
 | `GET /api/stats` | System statistics |
 
-## Signal Detection Logic
+## Tech Stack
 
-Each signal type has configurable thresholds in `src/config/index.ts`:
+- TypeScript / Node.js
+- SQLite (better-sqlite3)
+- WebSocket (ws)
+- transformers.js (local embeddings)
+- React + Recharts (dashboard)
 
-- **Complement**: Deviation > 3% from $1.00 sum
-- **Anchoring**: Price move > 8% on volume < 50% of average
-- **Attention**: Combined metric of volume, trades, and book depth
-- **Deadline**: Yes price > 15% for markets requiring formal acts
+## What I Learned
 
-See [docs/USER_MANUAL.md](docs/USER_MANUAL.md) for operational details.
+1. **Complement arbitrage doesn't exist** - CLOB keeps Yes/No perfectly balanced
+2. **30s polling too slow** - Real edges taken in milliseconds
+3. **Fees kill small edges** - 2% round-trip eats sub-3-cent arbs
+4. **Information > Execution** - Edge comes from knowing something, not speed
+
+See [content/ideas/polymarket-arb-research.md](content/ideas/polymarket-arb-research.md) for the full write-up.
 
 ## License
 
