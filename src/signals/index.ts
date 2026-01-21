@@ -27,6 +27,11 @@ import {
   computeDeadlineSignal,
   generateDeadlineRationale,
 } from './deadline.js';
+import {
+  scanForCorrelationSignals,
+  generateCorrelationRationale,
+  type CorrelationSignal,
+} from './correlation.js';
 import { computeTradability, type Tradability } from './tradability.js';
 import { rankSignals, getTopSignals } from './ranking.js';
 import type {
@@ -221,9 +226,27 @@ class SignalEngine {
       }
     }
 
+    // 5. Correlation Signals (runs once per cycle, not per market)
+    const correlationSignals = scanForCorrelationSignals();
+    for (const signal of correlationSignals) {
+      signals.push(signal as unknown as Signal);
+      // Store with minimal tradability (correlation signals span multiple markets)
+      const dummyMarket = markets.find(m => m.id === signal.marketId);
+      if (dummyMarket) {
+        const orderBooks = this.getOrderBooks(signal.marketId, timestamp);
+        const tradability = computeTradability(orderBooks.yes, orderBooks.no);
+        this.storeSignal(
+          signal as unknown as Signal,
+          dummyMarket,
+          tradability,
+          generateCorrelationRationale(signal)
+        );
+      }
+    }
+
     console.log(
       `📊 Signal engine: ${signals.length} signals from ${markets.length} markets ` +
-      `(${skippedForTradability} skipped for tradability)`
+      `(${skippedForTradability} skipped for tradability, ${correlationSignals.length} correlation)`
     );
     return signals;
   }

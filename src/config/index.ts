@@ -7,8 +7,9 @@ export interface Config {
   // Server
   serverPort: number;
 
-  // Polling
+  // Data ingestion
   pollIntervalMs: number;
+  useWebSocket: boolean; // Use real-time WebSocket instead of polling
 
   // Polymarket API
   polymarketBaseUrl: string;
@@ -62,6 +63,7 @@ export interface Config {
 export const config: Config = {
   serverPort: parseInt(process.env.PORT || '3000', 10),
   pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || '30000', 10),
+  useWebSocket: process.env.USE_WEBSOCKET === 'true', // Enable with USE_WEBSOCKET=true
 
   polymarketBaseUrl: 'https://clob.polymarket.com',
   polymarketAuth: {
@@ -87,23 +89,23 @@ export const config: Config = {
   signals: {
     complement: {
       enabled: true,
-      deviationThreshold: 0.02, // 2 cents (was 3) - more sensitive
+      deviationThreshold: 0.01, // 1 cent - catch micro-arbs
       feeRate: 0.02, // 2% total fees
     },
     anchoring: {
       enabled: true,
-      priceChangeThreshold: 0.05, // 5% move (was 8%) - catch smaller reversions
-      volumeRatioThreshold: 0.7, // Less than 70% of avg volume (was 50%)
-      minTrades: 2, // (was 3)
+      priceChangeThreshold: 0.03, // 3% move - catch smaller reversions
+      volumeRatioThreshold: 0.8, // Less than 80% of avg volume
+      minTrades: 2,
     },
     attention: {
       enabled: true,
-      lowAttentionThreshold: 40, // Attention score below 40 (was 30)
+      lowAttentionThreshold: 60, // Attention score below 60 - way more signals
     },
     deadline: {
       enabled: true,
-      mispricingThreshold: 0.10, // 10 points above base rate (was 15)
-      minHours: 12, // (was 24)
+      mispricingThreshold: 0.05, // 5 points above base rate
+      minHours: 6, // Catch closer deadlines
     },
   },
 };

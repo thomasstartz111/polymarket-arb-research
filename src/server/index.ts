@@ -8,6 +8,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { db } from '../db/client.js';
 import { signalEngine } from '../signals/index.js';
+import { scanForCorrelationSignals, findCorrelatedPairs } from '../signals/correlation.js';
 import { generateTradePlan } from '../trading/planner.js';
 import { checkTradeRisk, getPortfolioState } from '../trading/risk.js';
 import { paperExecutor } from '../trading/paper.js';
@@ -384,6 +385,37 @@ app.get('/api/stats', (_req: Request, res: Response) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * GET /api/debug/correlation
+ * Debug endpoint for correlation signal testing
+ */
+app.get('/api/debug/correlation', (_req: Request, res: Response) => {
+  try {
+    const pairs = findCorrelatedPairs();
+    const signals = scanForCorrelationSignals();
+
+    res.json({
+      pairsFound: pairs.length,
+      signalsTriggered: signals.length,
+      pairs: pairs.slice(0, 10).map(p => ({
+        marketA: p.marketA.question.slice(0, 60),
+        marketB: p.marketB.question.slice(0, 60),
+        priceA: p.marketA.priceYes,
+        priceB: p.marketB.priceYes,
+        type: p.correlationType,
+      })),
+      signals: signals.slice(0, 10).map(s => ({
+        rationale: s.rationale,
+        divergence: s.divergence,
+        direction: s.direction,
+      })),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: message, stack: error instanceof Error ? error.stack : undefined });
   }
 });
 

@@ -8,7 +8,7 @@ export type SignalStrength = 'weak' | 'strong';
 // Base signal output that all signals share
 export interface BaseSignal {
   signalId: string;
-  signalType: 'complement' | 'anchoring' | 'low_attention' | 'deadline';
+  signalType: 'complement' | 'anchoring' | 'low_attention' | 'deadline' | 'correlation';
   marketId: string;
   isTriggered: boolean;
   strength: SignalStrength; // weak = looser threshold, strong = high confidence
@@ -58,8 +58,21 @@ export interface DeadlineSignal extends BaseSignal {
   rationaleDetail: string;
 }
 
+// Cross-market correlation signal
+export interface CorrelationSignal extends BaseSignal {
+  signalType: 'correlation';
+  relatedMarketId: string;
+  correlationType: 'subset' | 'related' | 'opposite' | 'time_variant';
+  expectedRelation: string;
+  marketAPrice: number;
+  marketBPrice: number;
+  divergence: number;
+  divergencePct: number;
+  rationale: string;
+}
+
 // Union type for all signals
-export type Signal = ComplementSignal | AnchoringSignal | AttentionSignal | DeadlineSignal;
+export type Signal = ComplementSignal | AnchoringSignal | AttentionSignal | DeadlineSignal | CorrelationSignal;
 
 // Ranked signal with additional metadata
 export interface RankedSignal {
