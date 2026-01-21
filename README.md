@@ -141,7 +141,14 @@ cd ui && npm install && npm run dev
 3. **Fees kill small edges** - 2% round-trip eats sub-3-cent arbs
 4. **Information > Execution** - Edge comes from knowing something, not speed
 
-See [content/ideas/polymarket-arb-research.md](content/ideas/polymarket-arb-research.md) for the full write-up.
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Research Report](docs/RESEARCH_REPORT.md) | Comprehensive findings and methodology |
+| [System Review](docs/SYSTEM_REVIEW.md) | Technical architecture deep-dive |
+| [Experiment Plan](docs/EXPERIMENT_V2.md) | V2 experiment design |
+| [Dev Log](content/ideas/polymarket-arb-research.md) | Narrative write-up |
 
 ## License
 
